@@ -179,9 +179,9 @@ cdef class Splitter:
 
         self.sample_weight = sample_weight
         return 0
-
+    # CEDRIC : Add SIZE_t depth in arg
     cdef int node_reset(self, SIZE_t start, SIZE_t end,
-                        double* weighted_n_node_samples) nogil except -1:
+                        double* weighted_n_node_samples, SIZE_t depth) nogil except -1:
         """Reset splitter on node samples[start:end].
 
         Returns -1 in case of failure to allocate memory (and raise MemoryError)
@@ -199,13 +199,15 @@ cdef class Splitter:
 
         self.start = start
         self.end = end
-
+        # CEDRIC : Add depth in arg
+        # self.depth = depth
         self.criterion.init(self.y,
                             self.sample_weight,
                             self.weighted_n_samples,
                             self.samples,
                             start,
-                            end)
+                            end,
+                            depth)
 
         weighted_n_node_samples[0] = self.criterion.weighted_n_node_samples
         return 0

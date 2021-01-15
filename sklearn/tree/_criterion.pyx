@@ -21,6 +21,9 @@ from libc.stdlib cimport free
 from libc.string cimport memcpy
 from libc.string cimport memset
 from libc.math cimport fabs
+# CEDRIC : Add for printf test
+from libc.stdio cimport printf
+
 
 import numpy as np
 cimport numpy as np
@@ -55,10 +58,10 @@ cdef class Criterion:
 
     def __setstate__(self, d):
         pass
-
+    # CEDRIC Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end) nogil except -1:
+                  SIZE_t end, SIZE_t depth) nogil except -1:
         """Placeholder for a method which will initialize the criterion.
 
         Returns -1 in case of failure to allocate memory (and raise MemoryError)
@@ -228,6 +231,8 @@ cdef class ClassificationCriterion(Criterion):
         self.start = 0
         self.pos = 0
         self.end = 0
+        # CEDRIC Add
+        self.depth = 0
 
         self.n_outputs = n_outputs
         self.n_samples = 0
@@ -276,10 +281,10 @@ cdef class ClassificationCriterion(Criterion):
                 (self.n_outputs,
                  sizet_ptr_to_ndarray(self.n_classes, self.n_outputs)),
                 self.__getstate__())
-
+    # CEDRIC : Add SIZE_t depth
     cdef int init(self, const DOUBLE_t[:, ::1] y,
                   DOUBLE_t* sample_weight, double weighted_n_samples,
-                  SIZE_t* samples, SIZE_t start, SIZE_t end) nogil except -1:
+                  SIZE_t* samples, SIZE_t start, SIZE_t end, SIZE_t depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children
@@ -311,6 +316,8 @@ cdef class ClassificationCriterion(Criterion):
         self.n_node_samples = end - start
         self.weighted_n_samples = weighted_n_samples
         self.weighted_n_node_samples = 0.0
+        # CEDRIC : Add :
+        self.depth = depth
 
         cdef SIZE_t* n_classes = self.n_classes
         cdef double* sum_total = self.sum_total
@@ -616,6 +623,8 @@ cdef class Gini(ClassificationCriterion):
         cdef double count_k
         cdef SIZE_t k
         cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
 
         for k in range(self.n_outputs):
             sq_count = 0.0
@@ -655,6 +664,8 @@ cdef class Gini(ClassificationCriterion):
         cdef double count_k
         cdef SIZE_t k
         cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
 
         for k in range(self.n_outputs):
             sq_count_left = 0.0
@@ -678,7 +689,10 @@ cdef class Gini(ClassificationCriterion):
 
         impurity_left[0] = gini_left / self.n_outputs
         impurity_right[0] = gini_right / self.n_outputs
-
+        # CEDRIC Test :
+        printf("----------------- TEST DEPTH ---------------------\n")
+        printf("%zu\n", depth)
+        printf("----------------- TEST DEPTH ---------------------\n")
 
 cdef class RegressionCriterion(Criterion):
     r"""Abstract regression criterion.
@@ -738,10 +752,10 @@ cdef class RegressionCriterion(Criterion):
 
     def __reduce__(self):
         return (type(self), (self.n_outputs, self.n_samples), self.__getstate__())
-
+    # CEDRIC Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end) nogil except -1:
+                  SIZE_t end, SIZE_t depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children
@@ -1026,10 +1040,10 @@ cdef class MAE(RegressionCriterion):
         for k in range(n_outputs):
             self.left_child[k] = WeightedMedianCalculator(n_samples)
             self.right_child[k] = WeightedMedianCalculator(n_samples)
-
+    # CEDRIC : Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end) nogil except -1:
+                  SIZE_t end, SIZE_t depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children
