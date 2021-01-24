@@ -177,5 +177,10 @@ def compute_sample_weight(class_weight, y, *, indices=None):
     expanded_class_weight = np.prod(expanded_class_weight,
                                     axis=0,
                                     dtype=np.float64)
+    # CEDRIC
+    # expanded_class_weight = expanded_class_weight[-1]
+        # np.prod(expanded_class_weight,
+        #                             axis=0,
+        #                             dtype=np.float64)
 
     return expanded_class_weight

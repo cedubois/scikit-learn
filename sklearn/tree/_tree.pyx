@@ -208,7 +208,7 @@ cdef class DepthFirstTreeBuilder(TreeBuilder):
 
                 n_node_samples = end - start
                 # CEDRIC : Add depth in arg
-                splitter.node_reset(start, end, &weighted_n_node_samples, depth)
+                splitter.node_reset(start, end, &weighted_n_node_samples, depth, max_depth)
 
                 is_leaf = (depth >= max_depth or
                            n_node_samples < min_samples_split or
@@ -432,8 +432,10 @@ cdef class BestFirstTreeBuilder(TreeBuilder):
         cdef bint is_leaf
         cdef SIZE_t n_left, n_right
         cdef double imp_diff
+        # CEDRIC
+        cdef SIZE_t max_depth = self.max_depth
 
-        splitter.node_reset(start, end, &weighted_n_node_samples, depth)
+        splitter.node_reset(start, end, &weighted_n_node_samples, depth, max_depth)
 
         if is_first:
             impurity = splitter.node_impurity()

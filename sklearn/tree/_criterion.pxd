@@ -32,6 +32,7 @@ cdef class Criterion:
     cdef SIZE_t pos                      # samples[pos:end] are the samples in the right node
     cdef SIZE_t end
     cdef SIZE_t depth                    # depth Add by CEDRIC
+    cdef SIZE_t max_depth                # max_depth Add by CEDRIC
 
     cdef SIZE_t n_outputs                # Number of outputs
     cdef SIZE_t n_samples                # Number of samples
@@ -55,7 +56,7 @@ cdef class Criterion:
     # Methods
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end, SIZE_t depth) nogil except -1
+                  SIZE_t end, SIZE_t depth, SIZE_t max_depth) nogil except -1
     cdef int reset(self) nogil except -1
     cdef int reverse_reset(self) nogil except -1
     cdef int update(self, SIZE_t new_pos) nogil except -1

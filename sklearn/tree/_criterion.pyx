@@ -40,6 +40,11 @@ from ._utils cimport WeightedMedianCalculator
 # EPSILON is used in the Poisson criterion
 cdef double EPSILON = 10 * np.finfo('double').eps
 
+
+cdef double weight2(SIZE_t depth, int level, int L) nogil:
+    # return (L - <SIZE_t> depth) / (<double> L) - (1.0 - 2.0 * <SIZE_t> depth / (L)) * ( <double> level) / (L)
+    return (L - depth) / (<double> L) - (1.0 - 2.0 * depth / (L)) * ( <double> level) / (L)
+
 cdef class Criterion:
     """Interface for impurity criteria.
 
@@ -61,7 +66,7 @@ cdef class Criterion:
     # CEDRIC Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end, SIZE_t depth) nogil except -1:
+                  SIZE_t end, SIZE_t depth, SIZE_t max_depth) nogil except -1:
         """Placeholder for a method which will initialize the criterion.
 
         Returns -1 in case of failure to allocate memory (and raise MemoryError)
@@ -113,6 +118,8 @@ cdef class Criterion:
             New starting index position of the samples in the right child
         """
         pass
+    # cdef double weight(self,SIZE_t depth,int level) nogil: # CEDRIC Add
+    #     pass
 
     cdef double node_impurity(self) nogil:
         """Placeholder for calculating the impurity of the node.
@@ -232,6 +239,7 @@ cdef class ClassificationCriterion(Criterion):
         self.pos = 0
         self.end = 0
         # CEDRIC Add
+        self.max_depth = 0
         self.depth = 0
 
         self.n_outputs = n_outputs
@@ -281,10 +289,10 @@ cdef class ClassificationCriterion(Criterion):
                 (self.n_outputs,
                  sizet_ptr_to_ndarray(self.n_classes, self.n_outputs)),
                 self.__getstate__())
-    # CEDRIC : Add SIZE_t depth
+    # CEDRIC : Add SIZE_t depth, SIZE_t max_depth
     cdef int init(self, const DOUBLE_t[:, ::1] y,
                   DOUBLE_t* sample_weight, double weighted_n_samples,
-                  SIZE_t* samples, SIZE_t start, SIZE_t end, SIZE_t depth) nogil except -1:
+                  SIZE_t* samples, SIZE_t start, SIZE_t end, SIZE_t depth, SIZE_t max_depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children
@@ -318,6 +326,7 @@ cdef class ClassificationCriterion(Criterion):
         self.weighted_n_node_samples = 0.0
         # CEDRIC : Add :
         self.depth = depth
+        self.max_depth = max_depth
 
         cdef SIZE_t* n_classes = self.n_classes
         cdef double* sum_total = self.sum_total
@@ -483,6 +492,8 @@ cdef class ClassificationCriterion(Criterion):
 
         self.pos = new_pos
         return 0
+    # cdef double weight(self,SIZE_t depth,int level) nogil: # CEDRIC Add
+    #     pass
 
     cdef double node_impurity(self) nogil:
         pass
@@ -592,6 +603,234 @@ cdef class Entropy(ClassificationCriterion):
         impurity_right[0] = entropy_right / self.n_outputs
 
 
+
+cdef class Gini_H_normed(ClassificationCriterion):
+    r"""Gini Index impurity criterion.
+
+    This handles cases where the target is a classification taking values
+    0, 1, ... K-2, K-1. If node m represents a region Rm with Nm observations,
+    then let
+
+        count_k = 1/ Nm \sum_{x_i in Rm} I(yi = k)
+
+    be the proportion of class k observations in node m.
+
+    The Gini Index is then defined as:
+
+        index = \sum_{k=0}^{K-1} count_k (1 - count_k)
+              = 1 - \sum_{k=0}^{K-1} count_k ** 2
+    """
+
+    cdef double node_impurity(self) nogil:
+        """Evaluate the impurity of the current node.
+
+        Evaluate the Gini criterion as impurity of the current node,
+        i.e. the impurity of samples[start:end]. The smaller the impurity the
+        better.
+        """
+        cdef SIZE_t* n_classes = self.n_classes
+        cdef double* sum_total = self.sum_total
+        cdef double gini = 0.0
+        cdef double sq_count
+        cdef double count_k
+        cdef SIZE_t k
+        cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
+        cdef SIZE_t max_depth = self.max_depth
+        cdef double w2
+
+        for k in range(self.n_outputs):
+            sq_count = 0.0
+
+            for c in range(n_classes[k]):
+                count_k = sum_total[c]
+                sq_count += count_k * count_k
+            # CEDRIC
+            if self.n_outputs > 1:
+                w2 = weight2(<SIZE_t> depth*self.n_outputs/max_depth, k, self.n_outputs)
+
+            gini += w2 * (1.0 - sq_count / (self.weighted_n_node_samples *
+                                      self.weighted_n_node_samples))
+
+            sum_total += self.sum_stride
+
+        return gini *2 / self.n_outputs
+
+
+    cdef void children_impurity(self, double* impurity_left,
+                                double* impurity_right) nogil:
+        """Evaluate the impurity in children nodes.
+
+        i.e. the impurity of the left child (samples[start:pos]) and the
+        impurity the right child (samples[pos:end]) using the Gini index.
+
+        Parameters
+        ----------
+        impurity_left : double pointer
+            The memory address to save the impurity of the left node to
+        impurity_right : double pointer
+            The memory address to save the impurity of the right node to
+        """
+        cdef SIZE_t* n_classes = self.n_classes
+        cdef double* sum_left = self.sum_left
+        cdef double* sum_right = self.sum_right
+        cdef double gini_left = 0.0
+        cdef double gini_right = 0.0
+        cdef double sq_count_left
+        cdef double sq_count_right
+        cdef double count_k
+        cdef SIZE_t k
+        cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
+        cdef SIZE_t max_depth = self.max_depth
+        cdef double w2
+
+        for k in range(self.n_outputs):
+            sq_count_left = 0.0
+            sq_count_right = 0.0
+
+            for c in range(n_classes[k]):
+                count_k = sum_left[c]
+                sq_count_left += count_k * count_k
+
+                count_k = sum_right[c]
+                sq_count_right += count_k * count_k
+            # CEDRIC
+            if self.n_outputs > 1:
+                w2 = weight2(<SIZE_t> depth*self.n_outputs/max_depth, k, self.n_outputs)
+
+            gini_left += w2*(1.0 - sq_count_left / (self.weighted_n_left *
+                                                self.weighted_n_left))
+
+            gini_right += w2*(1.0 - sq_count_right / (self.weighted_n_right *
+                                                  self.weighted_n_right))
+
+            sum_left += self.sum_stride
+            sum_right += self.sum_stride
+
+        impurity_left[0] = gini_left *2 / self.n_outputs
+        impurity_right[0] = gini_right *2 / self.n_outputs
+
+
+cdef class Gini_H(ClassificationCriterion):
+    r"""Gini Index impurity criterion.
+
+    This handles cases where the target is a classification taking values
+    0, 1, ... K-2, K-1. If node m represents a region Rm with Nm observations,
+    then let
+
+        count_k = 1/ Nm \sum_{x_i in Rm} I(yi = k)
+
+    be the proportion of class k observations in node m.
+
+    The Gini Index is then defined as:
+
+        index = \sum_{k=0}^{K-1} count_k (1 - count_k)
+              = 1 - \sum_{k=0}^{K-1} count_k ** 2
+    """
+
+    cdef double node_impurity(self) nogil:
+        """Evaluate the impurity of the current node.
+
+        Evaluate the Gini criterion as impurity of the current node,
+        i.e. the impurity of samples[start:end]. The smaller the impurity the
+        better.
+        """
+        cdef SIZE_t* n_classes = self.n_classes
+        cdef double* sum_total = self.sum_total
+        cdef double gini = 0.0
+        cdef double sq_count
+        cdef double count_k
+        cdef SIZE_t k
+        cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
+        cdef double w2
+
+        for k in range(self.n_outputs):
+            sq_count = 0.0
+
+            for c in range(n_classes[k]):
+                count_k = sum_total[c]
+                sq_count += count_k * count_k
+            # CEDRIC
+            if depth > self.n_outputs - 1:
+                if k < depth:
+                    w2 = 0.0
+                else:
+                    w2 = self.n_outputs * 0.5
+            else:
+                w2 = weight2(depth, k, self.n_outputs)
+
+            gini += w2 * (1.0 - sq_count / (self.weighted_n_node_samples *
+                                      self.weighted_n_node_samples))
+
+            sum_total += self.sum_stride
+
+        return gini *2 / self.n_outputs
+
+    cdef void children_impurity(self, double* impurity_left,
+                                double* impurity_right) nogil:
+        """Evaluate the impurity in children nodes.
+
+        i.e. the impurity of the left child (samples[start:pos]) and the
+        impurity the right child (samples[pos:end]) using the Gini index.
+
+        Parameters
+        ----------
+        impurity_left : double pointer
+            The memory address to save the impurity of the left node to
+        impurity_right : double pointer
+            The memory address to save the impurity of the right node to
+        """
+        cdef SIZE_t* n_classes = self.n_classes
+        cdef double* sum_left = self.sum_left
+        cdef double* sum_right = self.sum_right
+        cdef double gini_left = 0.0
+        cdef double gini_right = 0.0
+        cdef double sq_count_left
+        cdef double sq_count_right
+        cdef double count_k
+        cdef SIZE_t k
+        cdef SIZE_t c
+        # CEDRIC : Add
+        cdef SIZE_t depth = self.depth
+        cdef double w2
+
+        for k in range(self.n_outputs):
+            sq_count_left = 0.0
+            sq_count_right = 0.0
+
+            for c in range(n_classes[k]):
+                count_k = sum_left[c]
+                sq_count_left += count_k * count_k
+
+                count_k = sum_right[c]
+                sq_count_right += count_k * count_k
+
+            if depth > self.n_outputs - 1:
+                if k < depth:
+                    w2 = 0.0
+                else:
+                    w2 = self.n_outputs*0.5
+            else:
+                w2 = weight2(depth, k, self.n_outputs)
+
+            gini_left += w2*(1.0 - sq_count_left / (self.weighted_n_left *
+                                                self.weighted_n_left))
+
+            gini_right += w2*(1.0 - sq_count_right / (self.weighted_n_right *
+                                                  self.weighted_n_right))
+
+            sum_left += self.sum_stride
+            sum_right += self.sum_stride
+
+        impurity_left[0] = gini_left *2 / self.n_outputs
+        impurity_right[0] = gini_right *2 / self.n_outputs
+
+
 cdef class Gini(ClassificationCriterion):
     r"""Gini Index impurity criterion.
 
@@ -634,7 +873,7 @@ cdef class Gini(ClassificationCriterion):
                 sq_count += count_k * count_k
 
             gini += 1.0 - sq_count / (self.weighted_n_node_samples *
-                                      self.weighted_n_node_samples)
+                                     self.weighted_n_node_samples)
 
             sum_total += self.sum_stride
 
@@ -689,10 +928,6 @@ cdef class Gini(ClassificationCriterion):
 
         impurity_left[0] = gini_left / self.n_outputs
         impurity_right[0] = gini_right / self.n_outputs
-        # CEDRIC Test :
-        printf("----------------- TEST DEPTH ---------------------\n")
-        printf("%zu\n", depth)
-        printf("----------------- TEST DEPTH ---------------------\n")
 
 cdef class RegressionCriterion(Criterion):
     r"""Abstract regression criterion.
@@ -755,7 +990,7 @@ cdef class RegressionCriterion(Criterion):
     # CEDRIC Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end, SIZE_t depth) nogil except -1:
+                  SIZE_t end, SIZE_t depth, SIZE_t max_depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children
@@ -1043,7 +1278,7 @@ cdef class MAE(RegressionCriterion):
     # CEDRIC : Add depth
     cdef int init(self, const DOUBLE_t[:, ::1] y, DOUBLE_t* sample_weight,
                   double weighted_n_samples, SIZE_t* samples, SIZE_t start,
-                  SIZE_t end, SIZE_t depth) nogil except -1:
+                  SIZE_t end, SIZE_t depth, SIZE_t max_depth) nogil except -1:
         """Initialize the criterion.
 
         This initializes the criterion at node samples[start:end] and children

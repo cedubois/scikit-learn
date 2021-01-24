@@ -59,7 +59,9 @@ __all__ = ["DecisionTreeClassifier",
 DTYPE = _tree.DTYPE
 DOUBLE = _tree.DOUBLE
 
-CRITERIA_CLF = {"gini": _criterion.Gini,
+CRITERIA_CLF = {"gini_h_normed": _criterion.Gini_H_normed,
+                "gini_h": _criterion.Gini_H,
+                "gini": _criterion.Gini,
                 "entropy": _criterion.Entropy}
 CRITERIA_REG = {"mse": _criterion.MSE,
                 "friedman_mse": _criterion.FriedmanMSE,
