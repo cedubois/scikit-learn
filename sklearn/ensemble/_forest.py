@@ -147,15 +147,22 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
 
     if forest.bootstrap:
         n_samples = X.shape[0]
+        # n_outputs = y.shape[1] # CEDRIC Add
+
         if sample_weight is None:
             curr_sample_weight = np.ones((n_samples,), dtype=np.float64)
         else:
             curr_sample_weight = sample_weight.copy()
 
+        # CEDRIC Add **n_outputs
         indices = _generate_sample_indices(tree.random_state, n_samples,
                                            n_samples_bootstrap)
         sample_counts = np.bincount(indices, minlength=n_samples)
-        curr_sample_weight *= sample_counts
+        if forest.class_weight in ['balanced', 'balanced_subsample']:
+            curr_sample_weight *=sample_counts
+        else:
+            curr_sample_weight *= np.array([sample_counts for i in range(forest.n_outputs_)]).flatten()
+        # TODO : np.concatenate faster ?
 
         if class_weight == 'subsample':
             with catch_warnings():
@@ -303,17 +310,7 @@ class BaseForest(MultiOutputMixin, BaseEnsemble, metaclass=ABCMeta):
             )
         X, y = self._validate_data(X, y, multi_output=True,
                                    accept_sparse="csc", dtype=DTYPE)
-        if sample_weight is not None:
-            sample_weight = _check_sample_weight(sample_weight, X)
-
-        if issparse(X):
-            # Pre-sort indices to avoid that each individual tree of the
-            # ensemble sorts the indices.
-            X.sort_indices()
-
-        # Remap output
-        self.n_features_ = X.shape[1]
-
+        # CEDRIC : Moved here :
         y = np.atleast_1d(y)
         if y.ndim == 2 and y.shape[1] == 1:
             warn("A column-vector y was passed when a 1d array was"
@@ -327,7 +324,20 @@ class BaseForest(MultiOutputMixin, BaseEnsemble, metaclass=ABCMeta):
             y = np.reshape(y, (-1, 1))
 
         self.n_outputs_ = y.shape[1]
+        # CEDRIC End Move
 
+        if sample_weight is not None:
+            sample_weight = _check_sample_weight(sample_weight, X, n_outputs=self.n_outputs_) # CEDRIC Add n_outputs
+
+        if issparse(X):
+            # Pre-sort indices to avoid that each individual tree of the
+            # ensemble sorts the indices.
+            X.sort_indices()
+
+        # Remap output
+        self.n_features_ = X.shape[1]
+
+        # CEDRIC Initial position was here.
         y, expanded_class_weight = self._validate_y_class_weight(y)
 
         if getattr(y, "dtype", None) != DOUBLE or not y.flags.contiguous:

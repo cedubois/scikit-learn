@@ -139,7 +139,8 @@ cdef class Splitter:
         """
 
         self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
-        cdef SIZE_t n_samples = X.shape[0]
+        # CEDRIC :
+        cdef SIZE_t n_samples = X.shape[0] #X.shape[0]*y.shape[1]
 
         # Create a new array which will be used to store nonzero
         # samples from the feature of interest

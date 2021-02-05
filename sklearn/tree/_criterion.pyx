@@ -41,6 +41,7 @@ from ._utils cimport WeightedMedianCalculator
 cdef double EPSILON = 10 * np.finfo('double').eps
 
 
+
 cdef double weight2(SIZE_t depth, int level, int L) nogil:
     # return (L - <SIZE_t> depth) / (<double> L) - (1.0 - 2.0 * <SIZE_t> depth / (L)) * ( <double> level) / (L)
     return (L - depth) / (<double> L) - (1.0 - 2.0 * depth / (L)) * ( <double> level) / (L)
@@ -323,7 +324,9 @@ cdef class ClassificationCriterion(Criterion):
         self.end = end
         self.n_node_samples = end - start
         self.weighted_n_samples = weighted_n_samples
+        # CEDRIC :
         self.weighted_n_node_samples = 0.0
+        # self.weighted_n_node_samples = <double*> calloc(self.n_outputs, sizeof(double))
         # CEDRIC : Add :
         self.depth = depth
         self.max_depth = max_depth
@@ -336,11 +339,17 @@ cdef class ClassificationCriterion(Criterion):
         cdef SIZE_t k
         cdef SIZE_t c
         cdef DOUBLE_t w = 1.0
+        # CEDRIC
+        cdef DOUBLE_t w_h = 1.0
         cdef SIZE_t offset = 0
+        # CEDRIC
+        cdef double* weight_sums = <double*> calloc(self.n_outputs, sizeof(double))
 
         for k in range(self.n_outputs):
             memset(sum_total + offset, 0, n_classes[k] * sizeof(double))
             offset += self.sum_stride
+            # CEDRIC :
+            # self.weighted_n_node_samples[k] = 0.0
 
         for p in range(start, end):
             i = samples[p]
@@ -352,11 +361,30 @@ cdef class ClassificationCriterion(Criterion):
 
             # Count weighted class frequency for each target
             for k in range(self.n_outputs):
+                # CEDRIC
+                if sample_weight != NULL:
+                    if self.n_outputs>1:
+                        w_h = sample_weight[i * self.n_outputs + k]
+                    else:
+                        w_h = w
+                    #
                 c = <SIZE_t> self.y[i, k]
-                sum_total[k * self.sum_stride + c] += w
+                sum_total[k * self.sum_stride + c] += w_h
+                #
+                weight_sums[k] += w_h
 
-            self.weighted_n_node_samples += w
 
+            self.weighted_n_node_samples += w_h #sample_weight[i]
+        # if self.n_outputs > 1:
+        #     for p in range(start, end):
+        #         i = samples[p]
+        #
+        #         # Count weighted class frequency for each target
+        #         for k in range(self.n_outputs):
+        #             #
+        #             c = < SIZE_t > self.y[i, k]
+        #             sum_total[k * self.sum_stride + c] /= weight_sums[k]
+        #             #
         # Reset to pos=start
         self.reset()
         return 0
@@ -370,6 +398,9 @@ cdef class ClassificationCriterion(Criterion):
         self.pos = self.start
 
         self.weighted_n_left = 0.0
+        # CEDRIC
+        # self.weighted_n_left = < double * > calloc(self.n_outputs, sizeof(double))
+        # memset(self.weighted_n_left, 0, sizeof(double))
         self.weighted_n_right = self.weighted_n_node_samples
 
         cdef double* sum_total = self.sum_total
@@ -398,6 +429,10 @@ cdef class ClassificationCriterion(Criterion):
 
         self.weighted_n_left = self.weighted_n_node_samples
         self.weighted_n_right = 0.0
+        # CEDRIC
+        # self.weighted_n_right = < double * > calloc(self.n_outputs, sizeof(double))
+        # memset(self.weighted_n_right, 0, sizeof(double))
+        # self.weighted_n_left = self.weighted_n_node_samples
 
         cdef double* sum_total = self.sum_total
         cdef double* sum_left = self.sum_left
@@ -456,14 +491,18 @@ cdef class ClassificationCriterion(Criterion):
             for p in range(pos, new_pos):
                 i = samples[p]
 
-                if sample_weight != NULL:
-                    w = sample_weight[i]
+                # if sample_weight != NULL:
+                #     w = sample_weight[i]
 
                 for k in range(self.n_outputs):
+                    # CEDRIC
+                    if sample_weight != NULL:
+                        w = sample_weight[i * self.n_outputs + k]
+                    #
                     label_index = k * self.sum_stride + <SIZE_t> self.y[i, k]
                     sum_left[label_index] += w
 
-                self.weighted_n_left += w
+                self.weighted_n_left += w #sample_weight[i]
 
         else:
             self.reverse_reset()
@@ -471,14 +510,18 @@ cdef class ClassificationCriterion(Criterion):
             for p in range(end - 1, new_pos - 1, -1):
                 i = samples[p]
 
-                if sample_weight != NULL:
-                    w = sample_weight[i]
+                # if sample_weight != NULL:
+                #     w = sample_weight[i]
 
                 for k in range(self.n_outputs):
+                    # CEDRIC
+                    if sample_weight != NULL:
+                        w = sample_weight[i * self.n_outputs + k]
+                    #
                     label_index = k * self.sum_stride + <SIZE_t> self.y[i, k]
                     sum_left[label_index] -= w
 
-                self.weighted_n_left -= w
+                self.weighted_n_left -= w #w #sample_weight[i]
 
         # Update right part statistics
         self.weighted_n_right = self.weighted_n_node_samples - self.weighted_n_left
@@ -492,8 +535,6 @@ cdef class ClassificationCriterion(Criterion):
 
         self.pos = new_pos
         return 0
-    # cdef double weight(self,SIZE_t depth,int level) nogil: # CEDRIC Add
-    #     pass
 
     cdef double node_impurity(self) nogil:
         pass
@@ -652,6 +693,7 @@ cdef class Gini_H_normed(ClassificationCriterion):
 
             gini += w2 * (1.0 - sq_count / (self.weighted_n_node_samples *
                                       self.weighted_n_node_samples))
+
 
             sum_total += self.sum_stride
 

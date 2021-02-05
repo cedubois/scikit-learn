@@ -1272,8 +1272,8 @@ def _check_psd_eigenvalues(lambdas, enable_warnings=False):
 
     return lambdas
 
-
-def _check_sample_weight(sample_weight, X, dtype=None):
+# CEDRIC : Add n_outputs
+def _check_sample_weight(sample_weight, X, dtype=None, n_outputs=1):
     """Validate sample weights.
 
     Note that passing sample_weight=None will output an array of ones.
@@ -1307,9 +1307,9 @@ def _check_sample_weight(sample_weight, X, dtype=None):
         dtype = np.float64
 
     if sample_weight is None:
-        sample_weight = np.ones(n_samples, dtype=dtype)
+        sample_weight = np.ones(n_samples*n_outputs, dtype=dtype)
     elif isinstance(sample_weight, numbers.Number):
-        sample_weight = np.full(n_samples, sample_weight, dtype=dtype)
+        sample_weight = np.full(n_samples*n_outputs, sample_weight, dtype=dtype)
     else:
         if dtype is None:
             dtype = [np.float64, np.float32]
@@ -1320,9 +1320,9 @@ def _check_sample_weight(sample_weight, X, dtype=None):
         if sample_weight.ndim != 1:
             raise ValueError("Sample weights must be 1D array or scalar")
 
-        if sample_weight.shape != (n_samples,):
+        if sample_weight.shape != (n_samples*n_outputs,):
             raise ValueError("sample_weight.shape == {}, expected {}!"
-                             .format(sample_weight.shape, (n_samples,)))
+                             .format(sample_weight.shape, (n_samples*n_outputs,)))
     return sample_weight
 
 
