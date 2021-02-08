@@ -161,7 +161,10 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
         if forest.class_weight in ['balanced', 'balanced_subsample']:
             curr_sample_weight *=sample_counts
         else:
-            curr_sample_weight *= np.array([sample_counts for i in range(forest.n_outputs_)]).flatten()
+            # curr_sample_weight *= np.array([sample_counts for i in range(forest.n_outputs_)]).flatten()
+            for i, ii in enumerate(sample_counts):
+                for k in range(forest.n_outputs_):
+                    curr_sample_weight[i*forest.n_outputs_ + k] *= sample_counts[i]
         # TODO : np.concatenate faster ?
 
         if class_weight == 'subsample':

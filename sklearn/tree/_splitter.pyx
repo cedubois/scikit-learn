@@ -21,6 +21,8 @@ from libc.stdlib cimport free
 from libc.stdlib cimport qsort
 from libc.string cimport memcpy
 from libc.string cimport memset
+from libc.stdio cimport printf
+
 
 import numpy as np
 cimport numpy as np
@@ -141,6 +143,8 @@ cdef class Splitter:
         self.rand_r_state = self.random_state.randint(0, RAND_R_MAX)
         # CEDRIC :
         cdef SIZE_t n_samples = X.shape[0] #X.shape[0]*y.shape[1]
+        cdef int n_outputs = sizeof(sample_weight) / n_samples
+        # printf("%d" ,n_outputs)
 
         # Create a new array which will be used to store nonzero
         # samples from the feature of interest
@@ -157,7 +161,11 @@ cdef class Splitter:
                 j += 1
 
             if sample_weight != NULL:
-                weighted_n_samples += sample_weight[i]
+                # CEDRIC * n_outputs
+                # if n_outputs > 1:
+                #     for k in range(n_outputs):
+                #         weighted_n_samples += sample_weight[i * n_outputs + k]
+                weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1]
             else:
                 weighted_n_samples += 1.0
 
