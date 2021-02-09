@@ -165,7 +165,7 @@ cdef class Splitter:
                 # if n_outputs > 1:
                 #     for k in range(n_outputs):
                 #         weighted_n_samples += sample_weight[i * n_outputs + k]
-                weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1]
+                weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1] # TODO verif depend depth -> l384 criterion
             else:
                 weighted_n_samples += 1.0
 

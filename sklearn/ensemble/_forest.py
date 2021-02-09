@@ -150,7 +150,7 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
         # n_outputs = y.shape[1] # CEDRIC Add
 
         if sample_weight is None:
-            curr_sample_weight = np.ones((n_samples,), dtype=np.float64)
+            curr_sample_weight = np.ones((n_samples*forest.n_outputs_,), dtype=np.float64)
         else:
             curr_sample_weight = sample_weight.copy()
 
@@ -161,10 +161,11 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
         if forest.class_weight in ['balanced', 'balanced_subsample']:
             curr_sample_weight *=sample_counts
         else:
+            curr_sample_weight *= sample_counts
             # curr_sample_weight *= np.array([sample_counts for i in range(forest.n_outputs_)]).flatten()
-            for i, ii in enumerate(sample_counts):
-                for k in range(forest.n_outputs_):
-                    curr_sample_weight[i*forest.n_outputs_ + k] *= sample_counts[i]
+            # for i, ii in enumerate(sample_counts):
+            #     for k in range(forest.n_outputs_):
+            #         curr_sample_weight[i*forest.n_outputs_ + k] *= sample_counts[i]
         # TODO : np.concatenate faster ?
 
         if class_weight == 'subsample':
@@ -178,7 +179,8 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
 
         tree.fit(X, y, sample_weight=curr_sample_weight, check_input=False)
     else:
-        tree.fit(X, y, sample_weight=sample_weight, check_input=False)
+        tree.fit(X, y, sample_weight=sample_weight, check_input=False) # CEDRIC add *X.shape[0]
+        # -> BaseDecisionTree in _classes.py
 
     return tree
 
@@ -347,10 +349,13 @@ class BaseForest(MultiOutputMixin, BaseEnsemble, metaclass=ABCMeta):
             y = np.ascontiguousarray(y, dtype=DOUBLE)
 
         if expanded_class_weight is not None:
+            # print('expanded_class_weight is not None')
             if sample_weight is not None:
+                # print('sample_weight is not None')
                 sample_weight = sample_weight * expanded_class_weight
             else:
                 sample_weight = expanded_class_weight
+                # print(sample_weight.shape)
 
         # Get bootstrap sample size
         n_samples_bootstrap = _get_n_samples_bootstrap(

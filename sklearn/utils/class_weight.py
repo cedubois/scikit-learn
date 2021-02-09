@@ -174,16 +174,16 @@ def compute_sample_weight(class_weight, y, *, indices=None):
 
         expanded_class_weight.append(weight_k)
 
-    expanded_class_weight = np.prod(expanded_class_weight,
-                                    axis=0,
-                                    dtype=np.float64)
+    # expanded_class_weight = np.prod(expanded_class_weight,
+    #                                 axis=0,
+    #                                 dtype=np.float64)
     # CEDRIC
     # expanded_class_weight = expanded_class_weight[-1]
     #     np.prod(expanded_class_weight,
     #                                 axis=0,
                                     # dtype=np.float64)
 
-    return expanded_class_weight
+    return np.array(expanded_class_weight).flatten()
 
 @_deprecate_positional_args
 def compute_sample_weight_CEDRIC(class_weight, y, *, indices=None):

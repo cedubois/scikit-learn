@@ -227,9 +227,9 @@ cdef class DepthFirstTreeBuilder(TreeBuilder):
                     # If EPSILON=0 in the below comparison, float precision
                     # issues stop splitting, producing trees that are
                     # dissimilar to v0.18
-                    is_leaf = (is_leaf or split.pos >= end or
-                               (split.improvement + EPSILON <
-                                min_impurity_decrease))
+                    is_leaf = (is_leaf or split.pos >= end ) #or
+                               # (split.improvement + EPSILON <
+                               #  min_impurity_decrease)) # CEDRIC
 
                 node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
                                          split.threshold, impurity, n_node_samples,
