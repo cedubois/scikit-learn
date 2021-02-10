@@ -416,6 +416,8 @@ cdef class BestSplitter(BaseDenseSplitter):
                                 continue
 
                             current_proxy_improvement = self.criterion.proxy_impurity_improvement()
+                            # current_proxy_improvement = self.criterion.impurity_improvement(
+                # impurity, current.impurity_left, current.impurity_right)
 
                             if current_proxy_improvement > best_proxy_improvement:
                                 best_proxy_improvement = current_proxy_improvement

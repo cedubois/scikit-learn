@@ -33,6 +33,7 @@ from numpy.math cimport INFINITY
 from scipy.special.cython_special cimport xlogy
 
 from ._utils cimport log
+from libc.math cimport sqrt
 from ._utils cimport safe_realloc
 from ._utils cimport sizet_ptr_to_ndarray
 from ._utils cimport WeightedMedianCalculator
@@ -46,7 +47,7 @@ cdef double weight2(SIZE_t depth, int level, int L) nogil:
     # return (L - <SIZE_t> depth) / (<double> L) - (1.0 - 2.0 * <SIZE_t> depth / (L)) * ( <double> level) / (L)
     cdef double w
     w = (L - depth) / (<double> L) - (1.0 - 2.0 * depth / (L)) * ( <double> level) / (L)
-    return w
+    return w #0.5 #sqrt(w)
 
 cdef class Criterion:
     """Interface for impurity criteria.
