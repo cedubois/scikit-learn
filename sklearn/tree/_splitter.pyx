@@ -153,6 +153,7 @@ cdef class Splitter:
         cdef SIZE_t i, j
         cdef double weighted_n_samples = 0.0
         j = 0
+        cdef double w_m = 1.0
 
         for i in range(n_samples):
             # Only work with positively weighted samples
@@ -160,15 +161,21 @@ cdef class Splitter:
                 samples[j] = i
                 j += 1
 
+            w_m = 1.0
             if sample_weight != NULL:
+                for k in range(n_outputs):
+                    w_m *= sample_weight[i * n_outputs + k]
+                weighted_n_samples += w_m
                 # CEDRIC * n_outputs
                 # if n_outputs > 1:
                 #     for k in range(n_outputs):
                 #         weighted_n_samples += sample_weight[i * n_outputs + k]
-                weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1] # TODO verif depend depth -> l384 criterion
+                # weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1] # TODO verif depend depth -> l384 criterion
+                # weighted_n_samples += sample_weight[i * n_outputs + n_outputs-1] #Should be the same for all outputs
             else:
                 weighted_n_samples += 1.0
-
+        # CEDRIC :
+        # weighted_n_samples /= n_outputs
         # Number of samples is number of positively weighted samples
         self.n_samples = j
         self.weighted_n_samples = weighted_n_samples

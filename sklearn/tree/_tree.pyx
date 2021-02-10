@@ -210,26 +210,26 @@ cdef class DepthFirstTreeBuilder(TreeBuilder):
                 # CEDRIC : Add depth in arg
                 splitter.node_reset(start, end, &weighted_n_node_samples, depth, max_depth)
 
-                is_leaf = (depth >= max_depth ) #or CEDRIC impurity
-                           # n_node_samples < min_samples_split or
-                           # n_node_samples < 2 * min_samples_leaf or
-                           # weighted_n_node_samples < 2 * min_weight_leaf)
+                is_leaf = (depth >= max_depth or #CEDRIC impurity
+                           n_node_samples < min_samples_split or
+                           n_node_samples < 2 * min_samples_leaf or
+                           weighted_n_node_samples < 2 * min_weight_leaf)
 
                 if first:
                     impurity = splitter.node_impurity()
                     first = 0
                 # CEDRIC impurity
-                # is_leaf = (is_leaf or
-                #            (impurity <= min_impurity_split))
+                is_leaf = (is_leaf or
+                           (impurity <= min_impurity_split))
 
                 if not is_leaf:
                     splitter.node_split(impurity, &split, &n_constant_features)
                     # If EPSILON=0 in the below comparison, float precision
                     # issues stop splitting, producing trees that are
                     # dissimilar to v0.18
-                    is_leaf = (is_leaf or split.pos >= end) #or
-                               # (split.improvement + EPSILON <
-                               #  min_impurity_decrease)) # CEDRIC impurity
+                    is_leaf = (is_leaf or split.pos >= end or
+                               (split.improvement + EPSILON <
+                                min_impurity_decrease)) # CEDRIC impurity
 
                 node_id = tree._add_node(parent, is_left, is_leaf, split.feature,
                                          split.threshold, impurity, n_node_samples,

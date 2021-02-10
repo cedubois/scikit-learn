@@ -347,6 +347,7 @@ cdef class ClassificationCriterion(Criterion):
         cdef DOUBLE_t w = 1.0
         # CEDRIC
         cdef DOUBLE_t w_h = 1.0
+        cdef DOUBLE_t w_h_m = 1.0
         cdef SIZE_t offset = 0
         # CEDRIC Try1.0
         # cdef double* weight_sums = <double*> calloc(self.n_outputs, sizeof(double))
@@ -367,11 +368,13 @@ cdef class ClassificationCriterion(Criterion):
                 w = sample_weight[i]
 
             # Count weighted class frequency for each target
+            w_h_m = 1.0
             for k in range(self.n_outputs):
                 # CEDRIC
                 if sample_weight != NULL:
                     if self.n_outputs>1:
                         w_h = sample_weight[i * self.n_outputs + k]
+                        w_h_m *= sample_weight[i * self.n_outputs + k]
                     else:
                         w_h = w
                     #
@@ -379,11 +382,11 @@ cdef class ClassificationCriterion(Criterion):
                 sum_total[k * self.sum_stride + c] += w_h
                 #
                 # weight_sums[k] += w_h
-                # weighted_n_node_samples[k] += w_h #sample_weight[i]
+            self.weighted_n_node_samples += w_h_m #sample_weight[i]
 
             # if self.depth < self.n_outputs:
             # self.weighted_n_node_samples += sample_weight[i * self.n_outputs + < SIZE_t > (self.n_outputs-1)* depth / max_depth] # w_h
-            self.weighted_n_node_samples += w_h # sample_weight[i * self.n_outputs + k]
+            # self.weighted_n_node_samples += w_h # sample_weight[i * self.n_outputs + k]
             # else:
             #     self.weighted_n_node_samples += sample_weight[i * self.n_outputs + self.n_outputs-1]
             # if self.n_outputs > 1:
@@ -397,6 +400,7 @@ cdef class ClassificationCriterion(Criterion):
         #             sum_total[k * self.sum_stride + c] /= weight_sums[k]
         #             #
         # Reset to pos=start
+        # self.weighted_n_node_samples /= self.n_outputs
         self.reset()
         return 0
 
@@ -492,6 +496,7 @@ cdef class ClassificationCriterion(Criterion):
         cdef SIZE_t label_index
         cdef DOUBLE_t w = 1.0
         cdef DOUBLE_t w_h = 1.0
+        cdef DOUBLE_t w_h_m = 1.0
         cdef SIZE_t depth = self.depth
         cdef SIZE_t max_depth = self.max_depth
 
@@ -509,18 +514,20 @@ cdef class ClassificationCriterion(Criterion):
                 if sample_weight != NULL:
                     w = sample_weight[i]
 
+                w_h_m = 1.0
                 for k in range(self.n_outputs):
                     # CEDRIC
                     if sample_weight != NULL:
                         if self.n_outputs>1:
                             w_h = sample_weight[i * self.n_outputs + k]
+                            w_h_m *= sample_weight[i * self.n_outputs + k]
                         else:
                             w_h = w
                     #
                     label_index = k * self.sum_stride + <SIZE_t> self.y[i, k]
                     sum_left[label_index] += w_h
-
-                self.weighted_n_left += sample_weight[i * self.n_outputs + < SIZE_t > (self.n_outputs-1)* depth / max_depth]
+                self.weighted_n_left += w_h_m # /self.n_outputs
+                    # self.weighted_n_left += sample_weight[i * self.n_outputs + < SIZE_t > (self.n_outputs-1)* depth / max_depth]
                 # sample_weight[i * self.n_outputs + self.depth] #w_h #sample_weight[i]
 
         else:
@@ -532,18 +539,21 @@ cdef class ClassificationCriterion(Criterion):
                 if sample_weight != NULL:
                     w = sample_weight[i]
 
+                w_h_m = 1.0
                 for k in range(self.n_outputs):
                     # CEDRIC
                     if sample_weight != NULL:
                         if self.n_outputs > 1:
                             w_h = sample_weight[i * self.n_outputs + k]
+                            w_h_m *= sample_weight[i * self.n_outputs + k]
                         else:
                             w_h = w
                     #
                     label_index = k * self.sum_stride + <SIZE_t> self.y[i, k]
                     sum_left[label_index] -= w_h
+                self.weighted_n_left -= w_h_m #/self.n_outputs
 
-                self.weighted_n_left -= sample_weight[i * self.n_outputs + < SIZE_t > (self.n_outputs-1)* depth / max_depth]
+                # self.weighted_n_left -= sample_weight[i * self.n_outputs + < SIZE_t > (self.n_outputs-1)* depth / max_depth]
                     # sample_weight[i * self.n_outputs + self.depth] #w_h #w #sample_weight[i]
 
         # Update right part statistics
@@ -1144,6 +1154,7 @@ cdef class Gini_H(ClassificationCriterion):
 #         impurity_right[0] = gini_right *2 / self.n_outputs
 
 
+
 cdef class Gini(ClassificationCriterion):
     r"""Gini Index impurity criterion.
 
@@ -1177,20 +1188,40 @@ cdef class Gini(ClassificationCriterion):
         cdef SIZE_t c
         # CEDRIC : Add
         cdef SIZE_t depth = self.depth
+        cdef SIZE_t max_depth = self.max_depth
+        cdef double w2
+        cdef double p
+        cdef double weighted_n_node_samples_sum = 0.0
+        cdef double weighted_n_node_samples_sum_k
+        cdef double w_sum = 0.0
+
 
         for k in range(self.n_outputs):
             sq_count = 0.0
+            weighted_n_node_samples_sum_k = 0.0
+
+            for c in range(n_classes[k]):
+                weighted_n_node_samples_sum_k += sum_total[c]
 
             for c in range(n_classes[k]):
                 count_k = sum_total[c]
-                sq_count += count_k * count_k
+                # sq_count += count_k * count_k
 
-            gini += 1.0 - sq_count / (self.weighted_n_node_samples *
-                                     self.weighted_n_node_samples)
+            # gini += w2 * (1.0 - sq_count / (self.weighted_n_node_samples *
+                                      # self.weighted_n_node_samples))
+                p =  count_k / <double> weighted_n_node_samples_sum_k
+                gini +=  p * (1.0-p)
+
+                # CEDRIC
+            weighted_n_node_samples_sum += weighted_n_node_samples_sum_k
+
 
             sum_total += self.sum_stride
+        # with gil:
+        #     self.weighted_n_node_samples_sum = weighted_n_node_samples_sum #*2 / self.n_outputs
 
-        return gini / self.n_outputs
+        return gini / self.n_outputs #*2 / self.n_outputs
+
 
     cdef void children_impurity(self, double* impurity_left,
                                 double* impurity_right) nogil:
@@ -1213,34 +1244,165 @@ cdef class Gini(ClassificationCriterion):
         cdef double gini_right = 0.0
         cdef double sq_count_left
         cdef double sq_count_right
-        cdef double count_k
+        cdef double count_k_r
+        cdef double count_k_l
         cdef SIZE_t k
         cdef SIZE_t c
         # CEDRIC : Add
         cdef SIZE_t depth = self.depth
+        cdef SIZE_t max_depth = self.max_depth
+        cdef double w2
+        cdef double p_r
+        cdef double p_l
+        cdef double weighted_n_left_sum = 0.0
+        cdef double weighted_n_right_sum = 0.0
+        cdef double weighted_n_node_samples_sum_r_k
+        cdef double weighted_n_node_samples_sum_l_k
+        cdef double w_sum = 0.0
 
         for k in range(self.n_outputs):
-            sq_count_left = 0.0
-            sq_count_right = 0.0
+            # sq_count_left = 0.0
+            # sq_count_right = 0.0
+            weighted_n_node_samples_sum_r_k = 0.0
+            weighted_n_node_samples_sum_l_k = 0.0
 
             for c in range(n_classes[k]):
-                count_k = sum_left[c]
-                sq_count_left += count_k * count_k
+                weighted_n_node_samples_sum_r_k += sum_right[c]
+                weighted_n_node_samples_sum_l_k += sum_left[c]
 
-                count_k = sum_right[c]
-                sq_count_right += count_k * count_k
+            for c in range(n_classes[k]):
+                count_k_l = sum_left[c]
+                # sq_count_left += count_k * count_k
 
-            gini_left += 1.0 - sq_count_left / (self.weighted_n_left *
-                                                self.weighted_n_left)
+                count_k_r = sum_right[c]
+                # sq_count_right += count_k * count_k
 
-            gini_right += 1.0 - sq_count_right / (self.weighted_n_right *
-                                                  self.weighted_n_right)
+                p_l = count_k_l / <double> weighted_n_node_samples_sum_l_k
+                gini_left += p_l * (1.0 - p_l)
+
+                p_r = count_k_r / <double> weighted_n_node_samples_sum_r_k
+                gini_right += p_r * (1.0 - p_r)
+
+            # gini_left += w2*(1.0 - sq_count_left / (self.weighted_n_left *
+                                                # self.weighted_n_left))
+
+            # gini_right += w2*(1.0 - sq_count_right / (self.weighted_n_right *
+            #                                       self.weighted_n_right))
 
             sum_left += self.sum_stride
             sum_right += self.sum_stride
 
-        impurity_left[0] = gini_left / self.n_outputs
-        impurity_right[0] = gini_right / self.n_outputs
+            weighted_n_right_sum += weighted_n_node_samples_sum_r_k
+            weighted_n_left_sum += weighted_n_node_samples_sum_l_k
+
+        # self.weighted_n_right = weighted_n_node_samples_sum_r
+        # self.weighted_n_left = weighted_n_node_samples_sum_l
+
+        # with gil:
+        #     self.weighted_n_left_sum = weighted_n_left_sum
+        #     self.weighted_n_right_sum = self.weighted_n_right_sum
+
+        impurity_left[0] = gini_left / self.n_outputs # *2 / self.n_outputs
+        impurity_right[0] = gini_right /  self.n_outputs# *2 / self.n_outputs
+#
+#
+# cdef class Gini(ClassificationCriterion):
+#     r"""Gini Index impurity criterion.
+#
+#     This handles cases where the target is a classification taking values
+#     0, 1, ... K-2, K-1. If node m represents a region Rm with Nm observations,
+#     then let
+#
+#         count_k = 1/ Nm \sum_{x_i in Rm} I(yi = k)
+#
+#     be the proportion of class k observations in node m.
+#
+#     The Gini Index is then defined as:
+#
+#         index = \sum_{k=0}^{K-1} count_k (1 - count_k)
+#               = 1 - \sum_{k=0}^{K-1} count_k ** 2
+#     """
+#
+#     cdef double node_impurity(self) nogil:
+#         """Evaluate the impurity of the current node.
+#
+#         Evaluate the Gini criterion as impurity of the current node,
+#         i.e. the impurity of samples[start:end]. The smaller the impurity the
+#         better.
+#         """
+#         cdef SIZE_t* n_classes = self.n_classes
+#         cdef double* sum_total = self.sum_total
+#         cdef double gini = 0.0
+#         cdef double sq_count
+#         cdef double count_k
+#         cdef SIZE_t k
+#         cdef SIZE_t c
+#         # CEDRIC : Add
+#         cdef SIZE_t depth = self.depth
+#
+#         for k in range(self.n_outputs):
+#             sq_count = 0.0
+#
+#             for c in range(n_classes[k]):
+#                 count_k = sum_total[c]
+#                 sq_count += count_k * count_k
+#
+#             gini += 1.0 - sq_count / (self.weighted_n_node_samples *
+#                                      self.weighted_n_node_samples)
+#
+#             sum_total += self.sum_stride
+#
+#         return gini / self.n_outputs
+#
+#     cdef void children_impurity(self, double* impurity_left,
+#                                 double* impurity_right) nogil:
+#         """Evaluate the impurity in children nodes.
+#
+#         i.e. the impurity of the left child (samples[start:pos]) and the
+#         impurity the right child (samples[pos:end]) using the Gini index.
+#
+#         Parameters
+#         ----------
+#         impurity_left : double pointer
+#             The memory address to save the impurity of the left node to
+#         impurity_right : double pointer
+#             The memory address to save the impurity of the right node to
+#         """
+#         cdef SIZE_t* n_classes = self.n_classes
+#         cdef double* sum_left = self.sum_left
+#         cdef double* sum_right = self.sum_right
+#         cdef double gini_left = 0.0
+#         cdef double gini_right = 0.0
+#         cdef double sq_count_left
+#         cdef double sq_count_right
+#         cdef double count_k
+#         cdef SIZE_t k
+#         cdef SIZE_t c
+#         # CEDRIC : Add
+#         cdef SIZE_t depth = self.depth
+#
+#         for k in range(self.n_outputs):
+#             sq_count_left = 0.0
+#             sq_count_right = 0.0
+#
+#             for c in range(n_classes[k]):
+#                 count_k = sum_left[c]
+#                 sq_count_left += count_k * count_k
+#
+#                 count_k = sum_right[c]
+#                 sq_count_right += count_k * count_k
+#
+#             gini_left += 1.0 - sq_count_left / (self.weighted_n_left *
+#                                                 self.weighted_n_left)
+#
+#             gini_right += 1.0 - sq_count_right / (self.weighted_n_right *
+#                                                   self.weighted_n_right)
+#
+#             sum_left += self.sum_stride
+#             sum_right += self.sum_stride
+#
+#         impurity_left[0] = gini_left / self.n_outputs
+#         impurity_right[0] = gini_right / self.n_outputs
 
 cdef class RegressionCriterion(Criterion):
     r"""Abstract regression criterion.

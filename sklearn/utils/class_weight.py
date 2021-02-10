@@ -56,6 +56,7 @@ def compute_class_weight(class_weight, *, classes, y):
         recip_freq = len(y) / (len(le.classes_) *
                                np.bincount(y_ind).astype(np.float64) )
         weight = recip_freq[le.transform(classes)]
+
     else:
         # user-defined dictionary
         weight = np.ones(classes.shape[0], dtype=np.float64, order='C')
@@ -167,7 +168,7 @@ def compute_sample_weight(class_weight, y, *, indices=None):
                                             y=y_full)
 
         weight_k = weight_k[np.searchsorted(classes_full, y_full)]
-
+        print(weight_k.sum(),'coucou')
         if classes_missing:
             # Make missing classes' weight zero
             weight_k[np.in1d(y_full, list(classes_missing))] = 0.

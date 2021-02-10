@@ -179,6 +179,10 @@ def _parallel_build_trees(tree, forest, X, y, sample_weight, tree_idx, n_trees,
 
         tree.fit(X, y, sample_weight=curr_sample_weight, check_input=False)
     else:
+        # w_sum=0.
+        # for i in range(X.shape[0]):
+        #     w_sum += sample_weight[i]
+        # print(w_sum)
         tree.fit(X, y, sample_weight=sample_weight, check_input=False) # CEDRIC add *X.shape[0]
         # -> BaseDecisionTree in _classes.py
 
